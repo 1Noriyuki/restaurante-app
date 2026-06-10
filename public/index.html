@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="icon" href="data:,">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faça seu Pedido Antecipado</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-2">Beduíno Árabe</h1>
+        <p class="text-sm text-gray-500 text-center mb-6">Peça antes, chegue e coma sem esperar!</p>
+
+        <form id="formPedido" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Seu Nome</label>
+                <input type="text" id="cliente" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Escolha seu Prato ou Combo</label>
+                <select id="prato" class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+                    <optgroup label="✨ Esfihas Tradicionais (Mais Pedidas)">
+                        <option value="Esfiha de Carne" data-tempo="3">Esfiha de Carne (3 min)</option>
+                        <option value="Esfiha de Queijo" data-tempo="3">Esfiha de Queijo (3 min)</option>
+                        <option value="Esfiha de Calabresa" data-tempo="3">Esfiha de Calabresa (3 min)</option>
+                    </optgroup>
+                    
+                    <optgroup label="🌯 Famosos Beirutes no Pão Sírio">
+                        <option value="Beirute da Casa (Filé Mignon)" data-tempo="10">Beirute da Casa - Mignon, Queijo, Ovo (10 min)</option>
+                        <option value="Beirute Mata-Fome" data-tempo="12">Beirute Mata-Fome - Completo e Gigante (12 min)</option>
+                    </optgroup>
+
+                    <optgroup label="🧆 Tradicionais Árabes & Porções">
+                        <option value="Kibe Frito" data-tempo="15">Kibe Frito (15 min)</option>
+                        <option value="Combo Falafel" data-tempo="12">Combo Falafel com Homus e Abobrinha (12 min)</option>
+                        <option value="Porção Almofadinhas de Gouda" data-tempo="6">Almofadinhas de Queijo Gouda - 6 unid (6 min)</option>
+                    </optgroup>
+                    
+                    <optgroup label="🥤 Bebidas Geladas">
+                        <option value="Refrigerante Lata" data-tempo="0">Refrigerante Lata (0 min)</option>
+                        <option value="Suco Natural de Laranja" data-tempo="2">Suco Natural de Laranja (2 min)</option>
+                    </optgroup>
+                    
+                    <optgroup label="🍫 Sobremesas">
+                        <option value="Torta Holandesa" data-tempo="0">Torta Holandêsa (0 min)</option>
+                        <option value="Chocolate Árabe Fino" data-tempo="0">Chocolate Árabe Fino (0 min)</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Que horas você vai chegar?</label>
+                <input type="time" id="horario_chegada" required class="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+            </div>
+
+            <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition duration-200">
+                Confirmar e Rastrear Chegada
+            </button>
+        </form>
+
+        <div id="resultado" class="mt-6 p-4 rounded-xl hidden text-center"></div>
+    </div>
+
+    <script>
+        const socket = io(); 
+        let meuPedidoId = null;
+        let intervalGps = null;
+
+        socket.on('pedidoConcluido', (data) => {
+            if (meuPedidoId && data.pedidoId === meuPedidoId) {
+                const resultadoDiv = document.getElementById('resultado');
+
+                resultadoDiv.className = "mt-6 p-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-center shadow-xl relative block clear-both transition-all duration-300";
+                resultadoDiv.innerHTML = `
+                    <div class="flex flex-col items-center justify-center gap-1">
+                        <span class="text-2xl inline-block animate-bounce mb-1">🔔</span>
+                        <p class="text-lg tracking-wide uppercase">Seu Pedido Está Pronto!</p>
+                        <p class="text-xs font-normal opacity-90 mt-1 max-w-xs mx-auto">
+                            Sua refeição do Beduíno saiu! Pode entrar e retirar seu pedido quentinho.
+                        </p>
+                    </div>
+                `;
+                
+                if (intervalGps) clearInterval(intervalGps); 
+            }
+        });
+
+        document.getElementById('formPedido').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const cliente = document.getElementById('cliente').value;
+            const selectPrato = document.getElementById('prato');
+            const prato = selectPrato.value;
+            const tempo_base_minutos = parseInt(selectPrato.options[selectPrato.selectedIndex].getAttribute('data-tempo'));
+            const horarioForm = document.getElementById('horario_chegada').value;
+
+            const [horas, minutos] = horarioForm.split(':');
+            const data_chegada = new Date();
+            data_chegada.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+
+            if (data_chegada <= new Date()) {
+                data_chegada.setDate(data_chegada.getDate() + 1);
+            }
+
+            const resultadoDiv = document.getElementById('resultado');
+
+            try {
+                const response = await fetch('/novo-pedido', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        cliente, 
+                        prato, 
+                        tempo_base_minutos, 
+                        horario_chegada: data_chegada.toISOString() 
+                    })
+                });
+
+                const dados = await response.json();
+
+                if (response.ok) {
+                    resultadoDiv.className = "mt-6 p-4 rounded-xl bg-green-100 text-green-800 text-sm space-y-2";
+                    resultadoDiv.innerHTML = `
+                        <p class="font-bold">🎉 Pedido Confirmado (ID: ${dados.pedido_id})!</p>
+                        <p>Fuso Estático: Cozinha planeja começar às <strong>${dados.cozinha_deve_comecar_as}</strong>.</p>
+                        <p class="text-xs text-blue-700 font-semibold animate-pulse">📡 GPS Ativado! Monitorando sua distância para não deixar esfriar.</p>
+                    `;
+
+                    meuPedidoId = dados.pedido_id;
+                    iniciarRastreamentoGps(meuPedidoId);
+                } else {
+                    throw new Error(dados.erro);
+                }
+            } catch (error) {
+                resultadoDiv.className = "mt-6 p-4 rounded-xl bg-red-100 text-red-800 text-sm";
+                resultadoDiv.innerHTML = `<p class="font-bold">⚠️ Erro:</p><p>${error.message}</p>`;
+            }
+
+            resultadoDiv.classList.remove('hidden');
+        });
+
+        function iniciarRastreamentoGps(pedidoId) {
+            if (intervalGps) clearInterval(intervalGps);
+
+            function enviarPosicao() {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    fetch('/atualizar-localizacao', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pedidoId: pedidoId,
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => console.log("GPS Sincronizado:", data))
+                    .catch(err => console.error("Erro GPS:", err));
+                }, (err) => console.warn("Aguardando permissão de GPS..."), {
+                    enableHighAccuracy: true
+                });
+            }
+
+            enviarPosicao();
+            intervalGps = setInterval(enviarPosicao, 5000);
+        }
+    </script>
+</body>
+</html>

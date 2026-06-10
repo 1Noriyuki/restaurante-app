@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="icon" href="data:,">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel da Cozinha - Logística GPS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .preparar-agora { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { background-color: #fee2e2; } 50% { background-color: #fca5a5; } }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-6">
+
+    <div class="max-w-5xl mx-auto">
+        <header class="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-3xl font-black text-orange-500">PAINEL DE PRODUÇÃO</h1>
+                <p class="text-xs text-slate-400">Sincronizado por Tempo & Deslocamento em Tempo Real</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="relogio" class="text-2xl font-mono bg-slate-800 px-4 py-2 rounded-xl">00:00:00</div>
+                <button onclick="fazerLogout()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-4 py-2 rounded-xl transition uppercase tracking-wider">
+                    🚪 Sair
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 gap-4" id="listaPedidos">
+            <p class="text-slate-400 text-center">Aguardando pedidos...</p>
+        </div>
+    </div>
+
+    <script>
+        setInterval(() => {
+            document.getElementById('relogio').innerText = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        }, 1000);
+
+        async function carregarPedidos() {
+            try {
+                const response = await fetch('/fila-cozinha');
+                const pedidos = await response.json();
+                
+                const container = document.getElementById('listaPedidos');
+                container.innerHTML = '';
+
+                if (pedidos.length === 0) {
+                    container.innerHTML = '<p class="text-slate-400 text-center py-8">Nenhum pedido pendente. Cozinha em paz! 🛋️</p>';
+                    return;
+                }
+
+                pedidos.forEach(pedido => {
+                    const horarioInicio = new Date(pedido.horario_inicio_preparo);
+                    const agora = new Date();
+                    
+                    // Cálculo do tempo total necessário de cozinha (Tempo do prato + 7.5 min de atraso simulado)
+                    const tempoNecessarioCozinha = Number(pedido.tempo_base_minutos) + 7.5;
+
+                    // CONDICIONAIS DE DISPARO
+                    const estourouTempoEstatico = agora >= horarioInicio;
+                    const clientePertoGps = Number(pedido.tempo_transito_atual) <= tempoNecessarioCozinha;
+
+                    // Gatilho Final: Dispara se qualquer uma das condições for verdadeira
+                    const deveComecar = estourouTempoEstatico || clientePertoGps;
+
+                    const horarioFormatado = horarioInicio.toLocaleTimeString('pt-BR', {
+                        timeZone: 'America/Sao_Paulo',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    const card = document.createElement('div');
+                    
+                    if (deveComecar) {
+                        card.className = "flex justify-between items-center p-6 rounded-xl border-2 border-red-500 preparar-agora text-slate-900 font-medium shadow-xl";
+                    } else {
+                        card.className = "flex justify-between items-center p-6 rounded-xl border-2 border-slate-700 bg-slate-800 text-white shadow-md";
+                    }
+                    
+                    const transitoAtual = pedido.tempo_transito_atual !== null ? pedido.tempo_transito_atual : 999;
+                    // Exibição amigável do status do trânsito
+                    let statusGpsTexto = "";
+                    if (transitoAtual === 999) {
+                        statusGpsTexto = "Aguardando sinal do GPS...";
+                    } else if (transitoAtual <= 2) {
+                        statusGpsTexto = "📍 CLIENTE CHEGANDO (Menos de 2 min)!";
+                    } else {
+                        statusGpsTexto = `🚗 Cliente a ${transitoAtual} min de distância`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="flex-1">
+                            <span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">${pedido.tempo_base_minutos} MIN DE PREPARO</span>
+                            <h2 class="text-xl font-black uppercase tracking-wide mt-2">${pedido.prato}</h2>
+                            <p class="text-sm opacity-90">Cliente: <strong>${pedido.cliente}</strong></p>
+                            <p class="text-xs font-mono mt-1 ${deveComecar ? 'text-red-900 font-bold' : 'text-orange-400'}">${statusGpsTexto}</p>
+                        </div>
+                        <div class="flex items-center gap-6">
+                            <div class="text-right">
+                                <p class="text-[10px] uppercase opacity-60 tracking-wider">Hora limite de início:</p>
+                                <p class="text-2xl font-mono font-bold">${horarioFormatado}</p>
+                                ${deveComecar ? `<span class="text-[10px] font-black uppercase tracking-wider block text-red-800 mt-1">${clientePertoGps ? '🚨 GATILHO POR GPS' : '⏰ GATILHO POR HORÁRIO'}</span>` : ''}
+                            </div>
+                            <button onclick="concluirPedido(${pedido.id})" class="px-5 py-3 rounded-xl font-bold uppercase text-sm transition duration-150 ${deveComecar ? 'bg-slate-900 text-white hover:bg-black' : 'bg-orange-500 text-white hover:bg-orange-600'}">
+                                OK
+                            </button>
+                        </div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error("Erro ao buscar pedidos:", error);
+            }
+        }
+
+        async function concluirPedido(id) {
+            if (!confirm("O prato está pronto?")) return;
+            try {
+                const response = await fetch(`/concluir-pedido/${id}`, { method: 'PUT' });
+                if (response.ok) carregarPedidos();
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        carregarPedidos();
+        setInterval(carregarPedidos, 3000); // Atualiza rápido a cozinha (3s) para acompanhar o GPS
+
+        async function fazerLogout() {
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                console.error("Erro ao fazer logout:", error);
+            }
+        }
+    </script>
+</body>
+</html>

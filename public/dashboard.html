@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="icon" href="data:,">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Performance - Beduíno</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8 border-b border-slate-800 pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-black text-orange-500 uppercase tracking-wider">Métricas de Eficiência</h1>
+                <p class="text-xs text-slate-400">Análise de tempo de entrega vs. chegada do cliente</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="carregarMetricas()" class="bg-slate-800 hover:bg-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition">
+                    🔄 Atualizar Dados
+                </button>
+                <button onclick="fazerLogout()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-4 py-2 rounded-xl transition uppercase tracking-wider">
+                    🚪 Sair
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+                <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Total de Pedidos Concluídos</p>
+                <p id="totalPedidos" class="text-5xl font-black text-white mt-2">0</p>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+                <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Tempo Médio de Espera (Cliente)</p>
+                <p id="tempoMedio" class="text-5xl font-black mt-2 text-green-400">0 min</p>
+                <p class="text-xs text-slate-400 mt-2">
+                    💡 <span class="font-semibold text-slate-300">Positivo:</span> Comida esperou pelo cliente. 
+                    <span class="font-semibold text-slate-300">Negativo:</span> Cliente esperou na loja.
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+            <div class="p-5 border-b border-slate-800 bg-slate-900/50">
+                <h2 class="font-bold text-lg text-slate-200">Histórico Recente de Entregas</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/50 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                            <th class="p-4">ID</th>
+                            <th class="p-4">Cliente</th>
+                            <th class="p-4">Prato</th>
+                            <th class="p-4">Prato Pronto Às</th>
+                            <th class="p-4">Chegada Prevista</th>
+                            <th class="p-4 text-right">Resultado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaCorpo" class="text-sm divide-y divide-slate-800">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function carregarMetricas() {
+            try {
+                const response = await fetch('/metricas-restaurante');
+                const dados = await response.json();
+
+                document.getElementById('totalPedidos').innerText = dados.total_pedidos_concluidos;
+                
+                const tempo = parseFloat(dados.tempo_medio_espera_minutos);
+                const tempoMedioEl = document.getElementById('tempoMedio');
+                
+                if (tempo > 0) {
+                    tempoMedioEl.innerText = `+${tempo} min`;
+                    tempoMedioEl.className = "text-5xl font-black mt-2 text-orange-400"; // Comida esperando um pouco
+                } else if (tempo < 0) {
+                    tempoMedioEl.innerText = `${tempo} min`;
+                    tempoMedioEl.className = "text-5xl font-black mt-2 text-red-400"; // Cliente esperando
+                } else {
+                    tempoMedioEl.innerText = `0.0 min`;
+                    tempoMedioEl.className = "text-5xl font-black mt-2 text-green-400"; // Sincronia perfeita!
+                }
+
+                const corpo = document.getElementById('tabelaCorpo');
+                corpo.innerHTML = '';
+
+                if (dados.historico.length === 0) {
+                    corpo.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-500">Nenhum dado registrado no histórico ainda.</td></tr>`;
+                    return;
+                }
+
+                dados.historico.reverse().forEach(pedido => {
+                    const conclusao = new Date(pedido.horario_conclusao);
+                    const chegada = new Date(pedido.horario_chegada);
+                    const difMinutos = ((chegada - conclusao) / 60000).toFixed(1);
+
+                    let badgeClasse = "";
+                    let badgeTexto = "";
+
+                    if (difMinutos > 0) {
+                        badgeClasse = "bg-orange-500/10 text-orange-400 border border-orange-500/20";
+                        badgeTexto = `Esfriando (${difMinutos}m)`;
+                    } else if (difMinutos < 0) {
+                        badgeClasse = "bg-red-500/10 text-red-400 border border-red-500/20";
+                        badgeTexto = `Cliente Esperou (${Math.abs(difMinutos)}m)`;
+                    } else {
+                        badgeClasse = "bg-green-500/10 text-green-400 border border-green-500/20";
+                        badgeTexto = "Sincronia Perfeita!";
+                    }
+
+                    const linha = document.createElement('tr');
+                    linha.className = "hover:bg-slate-900/50 transition";
+                    linha.innerHTML = `
+                        <td class="p-4 font-mono text-xs text-slate-500">#${pedido.id}</td>
+                        <td class="p-4 font-semibold text-slate-200">${pedido.cliente}</td>
+                        <td class="p-4 text-slate-300">${pedido.prato}</td>
+                        <td class="p-4 font-mono text-xs text-slate-400">${conclusao.toLocaleTimeString('pt-BR')}</td>
+                        <td class="p-4 font-mono text-xs text-slate-400">${chegada.toLocaleTimeString('pt-BR')}</td>
+                        <td class="p-4 text-right">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium ${badgeClasse}">
+                                ${badgeTexto}
+                            </span>
+                        </td>
+                    `;
+                    corpo.appendChild(linha);
+                });
+
+            } catch (error) {
+                console.error("Erro ao buscar métricas:", error);
+            }
+        }
+
+        carregarMetricas();
+
+        async function fazerLogout() {
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                console.error("Erro ao fazer logout:", error);
+            }
+        }
+    </script>
+</body>
+</html>

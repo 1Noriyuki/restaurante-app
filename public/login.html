@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Beduíno Sistema</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl max-w-sm w-full">
+        <h1 class="text-2xl font-black text-center text-orange-500 uppercase tracking-wider mb-2">Painel Restrito</h1>
+        <p class="text-xs text-slate-400 text-center mb-6">Acesso exclusivo para funcionários da cozinha e gerência</p>
+
+        <form id="formLogin" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase mb-1">Usuário</label>
+                <input type="text" id="usuario" required class="w-full bg-slate-800 text-white border border-slate-700 px-4 py-2 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase mb-1">Senha</label>
+                <input type="password" id="senha" required class="w-full bg-slate-800 text-white border border-slate-700 px-4 py-2 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+            </div>
+
+            <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition duration-200 text-sm uppercase tracking-wider mt-2">
+                Entrar no Sistema
+            </button>
+        </form>
+
+        <div id="erroMsg" class="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl hidden text-center"></div>
+    </div>
+
+    <script>
+        document.getElementById('formLogin').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const usuario = document.getElementById('usuario').value;
+            const senha = document.getElementById('senha').value;
+            const erroMsg = document.getElementById('erroMsg');
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario, senha })
+                });
+
+                const dados = await response.json();
+
+                if (response.ok) {
+                    // Login funcionou! O cookie foi salvo automaticamente pelo navegador.
+                    // Redireciona para a cozinha por padrão
+                    window.location.href = '/cozinha.html';
+                } else {
+                    throw new Error(dados.erro);
+                }
+            } catch (error) {
+                erroMsg.innerText = error.message;
+                erroMsg.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
