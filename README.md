@@ -29,8 +29,17 @@ O ecossistema foi construído utilizando o que há de mais moderno no desenvolvi
 ---
 
 ## 📦 Como Rodar o Projeto Localmente
-
+ddada
 ### 1. Clonar o repositório
 ```bash
 git clone [https://github.com/SEU_USUARIO/NOME_DO_REPOSITORIO.git](https://github.com/SEU_USUARIO/NOME_DO_REPOSITORIO.git)
 cd NOME_DO_REPOSITORIO
+
+### 2. Instalar as dependências
+```bash
+npm install
+
+### 3. Iniciar o servidor
+```bash
+node server.js
+
